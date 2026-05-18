@@ -1,6 +1,6 @@
 {
   "name": "stoa",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Solana-native multi-agent swarm framework. Autonomous agents coordinate onchain via GitHub Actions.",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,14 @@
     "dev": "tsx src/index.ts",
     "dispatch": "tsx src/dispatch.ts",
     "execute": "tsx src/execute.ts",
-    "tick": "tsx src/dispatch.ts"
+    "tick": "tsx src/dispatch.ts",
+    "chain": "tsx src/chain-cli.ts",
+    "validate": "tsx src/validate-config.ts",
+    "lint": "eslint 'src/**/*.ts' --max-warnings 0",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "test": "tsx test-pipeline.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "solana",
@@ -21,7 +28,9 @@
     "multi-agent",
     "framework",
     "autonomous",
-    "defi"
+    "defi",
+    "claude-code",
+    "self-healing"
   ],
   "license": "MIT",
   "dependencies": {
@@ -32,6 +41,20 @@
   "devDependencies": {
     "typescript": "^5.5.0",
     "tsx": "^4.16.0",
-    "@types/node": "^20.14.0"
-  }
+    "@types/node": "^20.14.0",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": [
+    "dist/",
+    "agents/",
+    "skills/",
+    "memory/",
+    "stoa.yml",
+    "CLAUDE.md"
+  ]
 }

@@ -77,3 +77,59 @@ export interface PortfolioState {
   status: "active" | "cooldown" | "halted";
   alerts: string[];
 }
+
+// --- Chain types ---
+
+export interface ChainDefinition {
+  name: string;
+  steps: Record<string, ChainStepDef>;
+  on_failure: "stop" | "continue" | "retry";
+  max_retries: number;
+  schedule?: string;
+}
+
+export interface ChainStepDef {
+  agent: string;
+  skill: string;
+  depends_on?: string[];
+  condition?: string;
+}
+
+// --- Health types ---
+
+export interface HealthReport {
+  timestamp: string;
+  overall_status: "healthy" | "degraded" | "critical";
+  agents: Record<string, AgentHealthStatus>;
+  recommendations: string[];
+}
+
+export interface AgentHealthStatus {
+  status: "healthy" | "degraded" | "failing";
+  avg_score: number;
+  issues: string[];
+}
+
+// --- Extended config types ---
+
+export interface StoaConfigV2 extends StoaConfig {
+  chains?: Record<string, ChainDefinition>;
+  health?: {
+    scoring_model: string;
+    repair_cooldown_minutes: number;
+    max_repairs_per_hour: number;
+  };
+  security?: {
+    scan_skills: boolean;
+    tool_allowlists: Record<string, string[]>;
+    protected_paths: string[];
+  };
+}
+
+// --- Webhook types ---
+
+export interface WebhookTrigger {
+  on: "webhook";
+  event_type: string;
+  source?: string;
+}

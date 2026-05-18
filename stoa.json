@@ -1,7 +1,7 @@
 {
   "name": "stoa",
-  "version": "0.1.0",
-  "description": "Solana-native multi-agent swarm framework",
+  "version": "0.2.0",
+  "description": "Solana-native multi-agent swarm framework with self-healing, quality scoring, and production-grade orchestration",
   "agents": [
     {
       "name": "scout",
@@ -20,8 +20,8 @@
     },
     {
       "name": "guardian",
-      "role": "Risk management",
-      "skills": ["check-risk"]
+      "role": "Risk management & swarm health",
+      "skills": ["check-risk", "health-check", "self-repair", "self-improve", "cost-report"]
     }
   ],
   "skills": [
@@ -29,7 +29,30 @@
     "analyze-signal",
     "execute-trade",
     "check-risk",
-    "morning-brief"
+    "morning-brief",
+    "health-check",
+    "self-repair",
+    "self-improve",
+    "cost-report"
+  ],
+  "chains": [
+    "full-scan",
+    "morning-pipeline",
+    "weekly-maintenance"
+  ],
+  "features": [
+    "self-healing",
+    "quality-scoring",
+    "skill-chaining",
+    "deduplication",
+    "rate-limiting",
+    "output-validation",
+    "token-tracking",
+    "structured-logging",
+    "security-scanning",
+    "wallet-tracking",
+    "webhook-triggers",
+    "retry-backoff"
   ],
   "chain": "solana",
   "runtime": "github-actions",

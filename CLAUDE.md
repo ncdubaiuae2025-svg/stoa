@@ -10,6 +10,17 @@ You are part of a **stoa swarm**: a multi-agent system that coordinates autonomo
 4. **Respect Guardian.** If there is a `halt` message in your inbox, stop immediately. Do nothing until the halt expires.
 5. **Never expose secrets.** Do not log, commit, or print private keys, API keys, or wallet addresses in full.
 6. **Structured output only.** Messages follow the JSON schemas defined in your AGENT.md. No freeform text in the mesh.
+7. **Never fabricate data.** If an API call fails or returns unexpected data, report the failure honestly. Do not invent prices, volumes, or addresses.
+8. **Validate before commit.** Check your outputs for consistency before writing to memory files.
+
+## Security Constraints
+
+- **Tool allowlist**: You may only use the tools specified for your agent role (Read, Write, Edit, Bash, Glob, Grep)
+- **Path restrictions**: You may only write to `memory/` and `memory/mesh/`. Never modify `src/`, `.github/`, `stoa.yml`, `package.json`, or `tsconfig.json`
+- **No external code execution**: Do not download and execute scripts from the internet. No `curl | sh` or `eval()` of remote content
+- **No credential storage**: Never write API keys, private keys, or tokens to any file
+- **Rate limiting**: Respect API rate limits. If you receive a 429 response, stop and report the limitation — do not retry aggressively
+- **Input sanitization**: When constructing API calls or shell commands, sanitize all dynamic values to prevent injection
 
 ## Memory Layout
 
@@ -18,11 +29,22 @@ memory/
 ├── cron-state.json        # dispatch timestamps per agent
 ├── positions.json         # open trades [{token, entry_price, amount, stop_loss_pct, ...}]
 ├── portfolio-state.json   # portfolio snapshot {total_value_usd, drawdown_pct, status}
+├── wallet-balance.json    # latest wallet balance snapshot
+├── wallet-history.json    # historical wallet balance log
 ├── scan-state.json        # scout's last-known prices and volumes
 ├── analyst-log.json       # analyst's reasoning history
 ├── tx-log.json            # executor's transaction history
 ├── risk-log.json          # guardian's alert history
 ├── whale-wallets.json     # tracked whale addresses
+├── repair-log.json        # self-repair history
+├── health-report.json     # latest swarm health report
+├── improvement-report.json # weekly self-improvement analysis
+├── cost-report.json       # weekly cost breakdown
+├── ratelimit-state.json   # API rate limit token buckets
+├── dedup-state.json       # dispatch deduplication state
+├── token-usage.csv        # per-run token and cost tracking
+├── skill-health/          # quality scores per agent-skill pair
+├── logs/                  # structured log files (daily)
 ├── briefs/                # morning brief archive
 └── mesh/                  # agent inboxes
     ├── scout.json
@@ -56,8 +78,20 @@ Read the files you need. Write the files your skill specifies. Do not modify fil
 3. Check your inbox (`memory/mesh/${STOA_AGENT}.json`) for messages
 4. Execute the skill steps
 5. Write outputs to the specified memory files
-6. Post messages to the mesh for other agents
+6. Post messages to the mesh for other agents (mark as typed JSON)
 7. Use the commit message format specified in the skill
+
+## Quality Standards
+
+Your output quality is automatically scored (1-5 scale). To achieve high scores:
+
+- **5/5**: Complete execution, all steps performed, accurate data, structured output, timely
+- **4/5**: Complete execution with minor data gaps or formatting issues
+- **3/5**: Partial execution, some steps skipped or data incomplete
+- **2/5**: Major issues — wrong data, incomplete execution, or schema violations
+- **1/5**: Failed execution or critical errors
+
+The self-healing system tracks your scores over 30 runs. Three consecutive scores of 2 or below triggers an automatic repair review.
 
 ## Anti-Patterns
 
@@ -66,3 +100,6 @@ Read the files you need. Write the files your skill specifies. Do not modify fil
 - Do NOT make up data. If an API call fails, report the failure — don't fabricate results
 - Do NOT send duplicate messages. Check the mesh for existing messages before posting
 - Do NOT ignore Guardian halt messages under any circumstances
+- Do NOT retry failed API calls more than 3 times
+- Do NOT process messages that are already acknowledged (check `_acknowledged` field)
+- Do NOT exceed your tool allowlist — stick to Read, Write, Edit, Bash, Glob, Grep

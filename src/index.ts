@@ -9,9 +9,13 @@ stoa — Solana-native multi-agent swarm framework
 Usage:
   stoa dispatch          Run the cron dispatcher (check schedules, trigger agents)
   stoa execute <agent> <skill>   Execute a specific agent's skill
+  stoa chain <chain-id>  Execute a skill chain/pipeline
   stoa status            Show swarm status
+  stoa health            Show skill health reports
+  stoa cost              Show token usage and cost summary
   stoa agents            List all agents and their config
   stoa mesh <agent>      Show an agent's inbox
+  stoa validate          Validate config and skills
   stoa reset             Reset swarm state (clear memory/mesh)
   stoa help              Show this help
 
@@ -23,6 +27,7 @@ Environment:
   TELEGRAM_BOT_TOKEN     Optional: Telegram notifications
   TELEGRAM_CHAT_ID       Optional: Telegram chat ID
   DISCORD_WEBHOOK_URL    Optional: Discord webhook
+  STOA_LOG_LEVEL         Log level: debug|info|warn|error (default: info)
 
 GitHub Actions:
   The swarm runs autonomously via GitHub Actions cron.
@@ -101,6 +106,60 @@ async function main() {
           `  [${msg.timestamp}] ${msg.from} -> ${msg.type}: ${JSON.stringify(msg.data).slice(0, 100)}`
         );
       }
+      break;
+    }
+
+    case "chain": {
+      await import("./chain-cli.js");
+      break;
+    }
+
+    case "health": {
+      const { getAllHealthReports, getFailingSkills } = await import("./health.js");
+      const reports = getAllHealthReports();
+      const failing = getFailingSkills();
+
+      console.log("=== stoa skill health ===");
+      console.log(`Total tracked: ${reports.length}`);
+      console.log(`Failing: ${failing.length}`);
+      console.log("");
+
+      for (const r of reports) {
+        const icon = r.needs_repair ? "!" : r.trend === "improving" ? "^" : r.trend === "degrading" ? "v" : "-";
+        console.log(
+          `  [${icon}] ${r.agent}/${r.skill}: avg=${r.avg_score} runs=${r.total_runs} trend=${r.trend}${r.needs_repair ? " NEEDS REPAIR" : ""}`
+        );
+      }
+
+      if (failing.length > 0) {
+        console.log("\nFailing skills:");
+        for (const f of failing) {
+          console.log(`  - ${f.agent}/${f.skill}: avg=${f.avg_score}, ${f.recent_failures} recent failures`);
+        }
+      }
+      break;
+    }
+
+    case "cost": {
+      const { getTotalCost } = await import("./tokens.js");
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const cost = getTotalCost(weekAgo);
+
+      console.log("=== stoa cost report (last 7 days) ===");
+      console.log(`Total: $${cost.total_usd.toFixed(4)}`);
+      console.log("\nBy agent:");
+      for (const [agent, c] of Object.entries(cost.by_agent)) {
+        console.log(`  ${agent}: $${c.toFixed(4)}`);
+      }
+      console.log("\nBy model:");
+      for (const [model, c] of Object.entries(cost.by_model)) {
+        console.log(`  ${model}: $${c.toFixed(4)}`);
+      }
+      break;
+    }
+
+    case "validate": {
+      await import("./validate-config.js");
       break;
     }
 

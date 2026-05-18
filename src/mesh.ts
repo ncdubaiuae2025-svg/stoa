@@ -107,3 +107,42 @@ export function isHalted(agent: string): boolean {
 
   return false;
 }
+
+/** Acknowledge messages by marking them as processed */
+export function acknowledgeMessages(agent: string, messageIds: string[]): void {
+  const messages = readInbox(agent);
+  const idSet = new Set(messageIds);
+
+  const updated = messages.map((m) => {
+    if (idSet.has(m.id)) {
+      return { ...m, data: { ...m.data, _acknowledged: true, _ack_at: new Date().toISOString() } };
+    }
+    return m;
+  });
+
+  writeFileSync(inboxPath(agent), JSON.stringify(updated, null, 2));
+}
+
+/** Get only unacknowledged messages */
+export function getUnacknowledgedMessages(agent: string): MeshMessage[] {
+  const messages = readInbox(agent);
+  return messages.filter((m) => !m.data?._acknowledged);
+}
+
+/** Get mesh statistics */
+export function getMeshStats(): Record<string, { total: number; unread: number }> {
+  const { readdirSync } = require("fs");
+  const stats: Record<string, { total: number; unread: number }> = {};
+
+  if (!existsSync(MESH_DIR)) return stats;
+
+  const files: string[] = readdirSync(MESH_DIR).filter((f: string) => f.endsWith(".json"));
+  for (const f of files) {
+    const agent = f.replace(".json", "");
+    const messages = readInbox(agent);
+    const unread = messages.filter((m) => !m.data?._acknowledged).length;
+    stats[agent] = { total: messages.length, unread };
+  }
+
+  return stats;
+}

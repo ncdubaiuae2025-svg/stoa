@@ -1,0 +1,64 @@
+# .github/workflows/chain-runner.yml — Skill Chain Executor
+# Runs multi-step skill pipelines with dependency resolution.
+# Dispatched via workflow_dispatch with a chain ID.
+
+name: chain-runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      chain_id:
+        description: "Chain configuration ID from stoa.yml"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: stoa-chain-${{ inputs.chain_id }}
+  cancel-in-progress: false
+
+jobs:
+  run-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Execute chain
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+          SOLANA_PRIVATE_KEY: ${{ secrets.SOLANA_PRIVATE_KEY }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STOA_CHAIN: ${{ inputs.chain_id }}
+        run: npx tsx src/chain-cli.ts ${{ inputs.chain_id }}
+
+      - name: Commit results
+        run: |
+          git config user.name "stoa[bot]"
+          git config user.email "stoa[bot]@users.noreply.github.com"
+          git add memory/ .outputs/ 2>/dev/null || true
+          if ! git diff --staged --quiet 2>/dev/null; then
+            git commit -m 'chain: ${{ inputs.chain_id }} @ '"$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin main && git push && break
+              echo "Push attempt $i failed, retrying..."
+              sleep $((i * 2))
+            done
+          fi

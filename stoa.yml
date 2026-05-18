@@ -1,5 +1,5 @@
 # ============================================================
-# stoa.yml — Swarm Configuration
+# stoa.yml — Swarm Configuration (v2)
 # ============================================================
 # Each agent is an autonomous unit with a role, skills, and schedule.
 # Agents coordinate through the mesh (memory/mesh/) — async message
@@ -10,7 +10,7 @@
 # Chain: Solana (configure SOLANA_RPC_URL and SOLANA_PRIVATE_KEY)
 # ============================================================
 
-version: 1
+version: 2
 
 # --- Global Settings ---
 defaults:
@@ -29,14 +29,28 @@ notifications:
     enabled: false
     webhook: ${DISCORD_WEBHOOK_URL}
 
-# --- Agent Definitions ---
-# Each agent has:
-#   role: what it does (human-readable)
-#   skills: list of skill directories it can execute
-#   schedule: cron expression for autonomous ticks
-#   model: optional LLM override
-#   var: runtime variables passed to skills
+# --- Health & Self-Healing Configuration ---
+health:
+  scoring_model: claude-haiku-3-5-20241022
+  repair_cooldown_minutes: 60        # min time between repairs for same skill
+  max_repairs_per_hour: 3            # max auto-repairs per hour across all skills
 
+# --- Security Configuration ---
+security:
+  scan_skills: true                  # scan skills for prompt injection before execution
+  tool_allowlists:
+    scout: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+    analyst: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+    executor: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+    guardian: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+  protected_paths:
+    - "src/"
+    - ".github/"
+    - "stoa.yml"
+    - "package.json"
+    - "tsconfig.json"
+
+# --- Agent Definitions ---
 agents:
   scout:
     role: "Onchain intelligence — monitors tokens, pools, whale wallets, and emerging signals on Solana"
@@ -55,7 +69,7 @@ agents:
       - analyze-signal
     schedule: "0 * * * *"            # every hour
     triggers:
-      - on: mesh                     # also runs when scout posts a message
+      - on: mesh
         from: scout
         type: signal
     var:
@@ -77,27 +91,85 @@ agents:
       protocols: ["jupiter", "raydium"]
 
   guardian:
-    role: "Risk management — monitors open positions, enforces stop-losses, checks portfolio health"
+    role: "Risk management & swarm health — monitors positions, enforces safety, heals failing skills"
     skills:
       - check-risk
-    schedule: "*/15 * * * *"         # every 15 min
+      - health-check
+      - self-repair
+      - self-improve
+      - cost-report
+    schedule: "*/15 * * * *"         # every 15 min (check-risk)
+    triggers:
+      - on: mesh
+        from: guardian
+        type: repair-needed
     var:
       max_drawdown_pct: 15
       max_portfolio_exposure_pct: 80
       alert_on_liquidation_risk: true
 
+# --- Skill Chains (Multi-step Pipelines) ---
+chains:
+  full-scan:
+    name: "Full Market Scan Pipeline"
+    steps:
+      scan:
+        agent: scout
+        skill: scan-tokens
+      analyze:
+        agent: analyst
+        skill: analyze-signal
+        depends_on: [scan]
+      risk-check:
+        agent: guardian
+        skill: check-risk
+        depends_on: [analyze]
+    on_failure: stop
+    max_retries: 1
+
+  morning-pipeline:
+    name: "Morning Brief + Analysis"
+    steps:
+      brief:
+        agent: scout
+        skill: morning-brief
+      analysis:
+        agent: analyst
+        skill: analyze-signal
+        depends_on: [brief]
+    on_failure: continue
+    max_retries: 0
+    schedule: "0 9 * * *"           # 9am daily
+
+  weekly-maintenance:
+    name: "Weekly Self-Improvement Cycle"
+    steps:
+      health:
+        agent: guardian
+        skill: health-check
+      cost:
+        agent: guardian
+        skill: cost-report
+      improve:
+        agent: guardian
+        skill: self-improve
+        depends_on: [health, cost]
+    on_failure: continue
+    max_retries: 0
+    schedule: "0 0 * * 0"           # Sunday midnight
+
 # --- Mesh Configuration ---
-# Agents communicate by writing JSON messages to memory/mesh/{to}.json
-# The dispatch system delivers messages on the recipient's next tick.
 mesh:
   max_history: 50                    # messages per agent inbox
   ttl_hours: 24                      # auto-expire old messages
 
 # --- Swarm Rules ---
-# Global constraints that override individual agent behavior.
 rules:
   - "Never execute a trade without analyst confirmation (confidence >= min_confidence)"
   - "Guardian can veto any executor action by posting a halt message"
   - "All state changes must be committed to memory/ with timestamps"
   - "No agent may spend more than max_position_usd per trade"
   - "If guardian detects drawdown > max_drawdown_pct, all agents enter cooldown mode"
+  - "Self-repair may only modify SKILL.md files — never src/ or .github/"
+  - "Maximum 3 auto-repairs per hour to prevent repair loops"
+  - "Wallet balance must be verified before any trade execution"

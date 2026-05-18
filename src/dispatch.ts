@@ -12,7 +12,11 @@ import { execSync } from "child_process";
 import { loadConfig } from "./config.js";
 import { getCronState, setCronState } from "./memory.js";
 import { readMessages } from "./mesh.js";
+import { isDuplicate, markDispatched } from "./dedup.js";
+import { createLogger } from "./logger.js";
 import type { CronState } from "./types.js";
+
+const log = createLogger("dispatch");
 
 /**
  * Cron parser — supports: *, star-slash-N, N, N-M (ranges), N,M,K (lists), and combinations.
@@ -181,7 +185,14 @@ async function main() {
 
     if (shouldRun) {
       for (const skill of agent.skills) {
+        // Deduplication check — prevent double-dispatch in overlapping ticks
+        if (isDuplicate(name, skill)) {
+          log.info(`Skipping duplicate dispatch: ${name}/${skill}`);
+          continue;
+        }
+
         dispatchAgent(name, skill);
+        markDispatched(name, skill);
         dispatched.push(`${name}/${skill}`);
       }
 
