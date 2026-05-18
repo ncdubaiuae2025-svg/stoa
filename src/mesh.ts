@@ -27,7 +27,8 @@ export function readInbox(agent: string): MeshMessage[] {
   try {
     const raw = readFileSync(path, "utf-8");
     return JSON.parse(raw) as MeshMessage[];
-  } catch {
+  } catch (e) {
+    console.error(`[stoa mesh] failed to read inbox for ${agent}:`, e instanceof Error ? e.message : e);
     return [];
   }
 }

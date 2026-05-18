@@ -95,28 +95,63 @@ function executeWithClaude(prompt: string, model: string): void {
 }
 
 function gitCommit(message: string): void {
+  // Sanitize message to prevent shell injection
+  const safeMessage = message.replace(/["\$`\\!]/g, "");
+
   try {
     execSync("git add memory/ mesh/ 2>/dev/null || true", { stdio: "pipe" });
-    execSync(`git diff --staged --quiet 2>/dev/null || git commit -m "${message}"`, {
-      stdio: "pipe",
-    });
-    execSync("git push 2>/dev/null || true", { stdio: "pipe" });
-  } catch {
-    // Non-fatal: commit may fail if nothing changed
+
+    // Check if there are staged changes before committing
+    try {
+      execSync("git diff --staged --quiet", { stdio: "pipe" });
+      return; // No changes, skip commit
+    } catch {
+      // Non-zero exit = there are staged changes, proceed
+    }
+
+    execSync(
+      `git commit -m '${safeMessage}'`,
+      { stdio: "pipe" }
+    );
+
+    // Pull with rebase to handle concurrent agent writes, then push
+    // Retry up to 3 times on conflict
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        execSync("git pull --rebase origin main 2>/dev/null || true", { stdio: "pipe" });
+        execSync("git push", { stdio: "pipe" });
+        break;
+      } catch (e) {
+        console.error(`[stoa] git push attempt ${attempt}/3 failed:`, e instanceof Error ? e.message : e);
+        if (attempt === 3) {
+          console.error("[stoa] git push failed after 3 attempts — changes are committed locally but not pushed");
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[stoa] gitCommit error:", e instanceof Error ? e.message : e);
   }
 }
 
 function notify(config: ReturnType<typeof loadConfig>, message: string): void {
+  // Sanitize message for safe transport — strip control chars and quotes
+  const safeMsg = message.replace(/[^\w\s\-.*|`@:$%()]/g, "").slice(0, 500);
+
   if (config.notifications?.telegram?.enabled) {
     const { bot_token, chat_id } = config.notifications.telegram;
     if (bot_token && chat_id && !bot_token.includes("${")) {
       try {
+        // Use --data-urlencode to avoid shell injection via message content
         execSync(
           `curl -s -X POST "https://api.telegram.org/bot${bot_token}/sendMessage" ` +
-            `-d chat_id="${chat_id}" -d text="${message}" -d parse_mode=Markdown`,
-          { stdio: "pipe" }
+            `--data-urlencode "chat_id=${chat_id}" ` +
+            `--data-urlencode "text=${safeMsg}" ` +
+            `--data-urlencode "parse_mode=Markdown"`,
+          { stdio: "pipe", timeout: 10_000 }
         );
-      } catch {}
+      } catch (e) {
+        console.error("[stoa] telegram notify failed:", e instanceof Error ? e.message : e);
+      }
     }
   }
 
@@ -124,12 +159,15 @@ function notify(config: ReturnType<typeof loadConfig>, message: string): void {
     const webhook = config.notifications.discord.webhook;
     if (webhook && !webhook.includes("${")) {
       try {
+        // Use stdin for JSON body to avoid shell injection
+        const payload = JSON.stringify({ content: safeMsg });
         execSync(
-          `curl -s -X POST "${webhook}" -H "Content-Type: application/json" ` +
-            `-d '{"content":"${message}"}'`,
-          { stdio: "pipe" }
+          `curl -s -X POST "${webhook}" -H "Content-Type: application/json" -d @-`,
+          { input: payload, stdio: ["pipe", "pipe", "pipe"], timeout: 10_000 }
         );
-      } catch {}
+      } catch (e) {
+        console.error("[stoa] discord notify failed:", e instanceof Error ? e.message : e);
+      }
     }
   }
 }
@@ -196,7 +234,9 @@ main().catch((e) => {
     if (config.defaults.commit) {
       gitCommit(`${AGENT_NAME}: ${SKILL_NAME} FAILED`);
     }
-  } catch {}
+  } catch (innerErr) {
+    console.error("[stoa] failed to record failure state:", innerErr instanceof Error ? innerErr.message : innerErr);
+  }
 
   process.exit(1);
 });

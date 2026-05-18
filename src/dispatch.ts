@@ -14,9 +14,50 @@ import { getCronState, setCronState } from "./memory.js";
 import { readMessages } from "./mesh.js";
 import type { CronState } from "./types.js";
 
-// Minimal cron parser — supports: */N, *, and fixed numbers
+/**
+ * Cron parser — supports: *, star-slash-N, N, N-M (ranges), N,M,K (lists), and combinations.
+ * Does NOT support: L, W, #, or named days/months. Use numeric values.
+ */
+function cronFieldMatches(field: string, value: number): boolean {
+  // Handle comma-separated list: "1,15,30"
+  if (field.includes(",")) {
+    return field.split(",").some((part) => cronFieldMatches(part.trim(), value));
+  }
+
+  // Wildcard: "*"
+  if (field === "*") return true;
+
+  // Step on wildcard: "*/N"
+  if (field.startsWith("*/")) {
+    const step = parseInt(field.slice(2));
+    if (isNaN(step) || step <= 0) return false;
+    return value % step === 0;
+  }
+
+  // Range with optional step: "1-5" or "1-5/2"
+  if (field.includes("-")) {
+    const [rangePart, stepPart] = field.split("/");
+    const [startStr, endStr] = rangePart.split("-");
+    const start = parseInt(startStr);
+    const end = parseInt(endStr);
+    if (isNaN(start) || isNaN(end)) return false;
+
+    if (value < start || value > end) return false;
+
+    if (stepPart) {
+      const step = parseInt(stepPart);
+      if (isNaN(step) || step <= 0) return false;
+      return (value - start) % step === 0;
+    }
+    return true;
+  }
+
+  // Fixed value: "30"
+  return parseInt(field) === value;
+}
+
 function cronMatches(expr: string, now: Date): boolean {
-  const parts = expr.split(" ");
+  const parts = expr.split(/\s+/);
   if (parts.length !== 5) return false;
 
   const fields = [
@@ -27,18 +68,7 @@ function cronMatches(expr: string, now: Date): boolean {
     now.getDay(),
   ];
 
-  return parts.every((part, i) => {
-    if (part === "*") return true;
-
-    // */N pattern
-    if (part.startsWith("*/")) {
-      const interval = parseInt(part.slice(2));
-      return fields[i] % interval === 0;
-    }
-
-    // Fixed value
-    return parseInt(part) === fields[i];
-  });
+  return parts.every((part, i) => cronFieldMatches(part, fields[i]));
 }
 
 function shouldDispatch(
