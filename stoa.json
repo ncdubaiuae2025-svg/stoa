@@ -1,0 +1,37 @@
+{
+  "name": "stoa",
+  "version": "0.1.0",
+  "description": "Solana-native multi-agent swarm framework",
+  "agents": [
+    {
+      "name": "scout",
+      "role": "Onchain intelligence",
+      "skills": ["scan-tokens", "morning-brief"]
+    },
+    {
+      "name": "analyst",
+      "role": "Signal processing",
+      "skills": ["analyze-signal"]
+    },
+    {
+      "name": "executor",
+      "role": "Trade execution",
+      "skills": ["execute-trade"]
+    },
+    {
+      "name": "guardian",
+      "role": "Risk management",
+      "skills": ["check-risk"]
+    }
+  ],
+  "skills": [
+    "scan-tokens",
+    "analyze-signal",
+    "execute-trade",
+    "check-risk",
+    "morning-brief"
+  ],
+  "chain": "solana",
+  "runtime": "github-actions",
+  "license": "MIT"
+}

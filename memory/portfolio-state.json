@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-05-18T00:00:00.000Z",
+  "total_value_usd": 0,
+  "total_value_sol": 0,
+  "peak_value_usd": 0,
+  "drawdown_pct": 0,
+  "open_positions": 0,
+  "status": "active",
+  "alerts": []
+}

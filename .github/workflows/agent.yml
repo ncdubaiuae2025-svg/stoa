@@ -1,0 +1,60 @@
+# .github/workflows/agent.yml — Agent Executor
+# Dispatched by tick.yml. Runs a single agent's skill via Claude Code.
+
+name: agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: "Agent name (scout, analyst, executor, guardian)"
+        required: true
+        type: string
+      skill:
+        description: "Skill to execute (e.g., scan-tokens)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stoa-agent-${{ inputs.agent }}
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Execute agent skill
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+          SOLANA_PRIVATE_KEY: ${{ secrets.SOLANA_PRIVATE_KEY }}
+          HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+          STOA_AGENT: ${{ inputs.agent }}
+          STOA_SKILL: ${{ inputs.skill }}
+        run: npx tsx src/execute.ts ${{ inputs.agent }} ${{ inputs.skill }}
+
+      - name: Commit results
+        run: |
+          git config user.name "stoa[bot]"
+          git config user.email "stoa[bot]@users.noreply.github.com"
+          git add memory/ mesh/ 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "${{ inputs.agent }}: ${{ inputs.skill }} @ $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push || true

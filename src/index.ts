@@ -1,0 +1,151 @@
+#!/usr/bin/env node
+// stoa/src/index.ts — CLI entry point
+
+const command = process.argv[2];
+
+const HELP = `
+stoa — Solana-native multi-agent swarm framework
+
+Usage:
+  stoa dispatch          Run the cron dispatcher (check schedules, trigger agents)
+  stoa execute <agent> <skill>   Execute a specific agent's skill
+  stoa status            Show swarm status
+  stoa agents            List all agents and their config
+  stoa mesh <agent>      Show an agent's inbox
+  stoa reset             Reset swarm state (clear memory/mesh)
+  stoa help              Show this help
+
+Environment:
+  ANTHROPIC_API_KEY      Required for Claude Code execution
+  SOLANA_RPC_URL         Solana RPC endpoint (default: mainnet public)
+  SOLANA_PRIVATE_KEY     Wallet private key (required for executor agent)
+  HELIUS_API_KEY         Optional: Helius API for enriched data
+  TELEGRAM_BOT_TOKEN     Optional: Telegram notifications
+  TELEGRAM_CHAT_ID       Optional: Telegram chat ID
+  DISCORD_WEBHOOK_URL    Optional: Discord webhook
+
+GitHub Actions:
+  The swarm runs autonomously via GitHub Actions cron.
+  Configure secrets in your repo settings, then push.
+`;
+
+async function main() {
+  switch (command) {
+    case "dispatch":
+    case "tick":
+      await import("./dispatch.js");
+      break;
+
+    case "execute":
+    case "run":
+      await import("./execute.js");
+      break;
+
+    case "status": {
+      const { getCronState, getPortfolioState, getPositions } = await import(
+        "./memory.js"
+      );
+      const state = getCronState();
+      const portfolio = getPortfolioState();
+      const positions = getPositions();
+
+      console.log("=== stoa swarm status ===");
+      console.log(`Status: ${state.swarm_status}`);
+      if (state.cooldown_until) {
+        console.log(`Cooldown until: ${state.cooldown_until}`);
+      }
+      console.log("");
+      console.log("Agents:");
+      for (const [name, info] of Object.entries(state.agents)) {
+        console.log(
+          `  ${name}: last=${info.last_dispatch || "never"} status=${info.last_status || "unknown"} runs=${info.run_count || 0}`
+        );
+      }
+      console.log("");
+      console.log("Portfolio:");
+      console.log(`  Value: $${portfolio.total_value_usd} (${portfolio.total_value_sol} SOL)`);
+      console.log(`  Drawdown: ${portfolio.drawdown_pct}%`);
+      console.log(`  Positions: ${positions.length}`);
+      break;
+    }
+
+    case "agents": {
+      const { loadConfig } = await import("./config.js");
+      const config = loadConfig();
+      console.log("=== stoa agents ===");
+      for (const [name, agent] of Object.entries(config.agents)) {
+        console.log(`\n[${name}]`);
+        console.log(`  Role: ${agent.role}`);
+        console.log(`  Skills: ${agent.skills.join(", ")}`);
+        console.log(`  Schedule: ${agent.schedule || "reactive"}`);
+        if (agent.triggers) {
+          console.log(
+            `  Triggers: ${agent.triggers.map((t) => `${t.on}:${t.from}:${t.type}`).join(", ")}`
+          );
+        }
+      }
+      break;
+    }
+
+    case "mesh": {
+      const agentName = process.argv[3];
+      if (!agentName) {
+        console.error("Usage: stoa mesh <agent>");
+        process.exit(1);
+      }
+      const { readInbox } = await import("./mesh.js");
+      const messages = readInbox(agentName);
+      console.log(`=== ${agentName} inbox (${messages.length} messages) ===`);
+      for (const msg of messages) {
+        console.log(
+          `  [${msg.timestamp}] ${msg.from} -> ${msg.type}: ${JSON.stringify(msg.data).slice(0, 100)}`
+        );
+      }
+      break;
+    }
+
+    case "reset": {
+      const { writeJSON } = await import("./memory.js");
+      const { clearInbox } = await import("./mesh.js");
+      const { loadConfig } = await import("./config.js");
+      const config = loadConfig();
+
+      writeJSON("cron-state.json", { agents: {}, swarm_status: "active" });
+      writeJSON("positions.json", []);
+      writeJSON("portfolio-state.json", {
+        timestamp: new Date().toISOString(),
+        total_value_usd: 0,
+        total_value_sol: 0,
+        peak_value_usd: 0,
+        drawdown_pct: 0,
+        open_positions: 0,
+        status: "active",
+        alerts: [],
+      });
+
+      for (const name of Object.keys(config.agents)) {
+        clearInbox(name);
+      }
+
+      console.log("Swarm state reset.");
+      break;
+    }
+
+    case "help":
+    case "--help":
+    case "-h":
+    case undefined:
+      console.log(HELP);
+      break;
+
+    default:
+      console.error(`Unknown command: ${command}`);
+      console.log(HELP);
+      process.exit(1);
+  }
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
