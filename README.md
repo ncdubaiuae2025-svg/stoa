@@ -19,6 +19,10 @@
 
 <p align="center"><i>Deploy a swarm, not a dashboard.</i></p>
 
+<p align="center">
+  <img src="assets/demo.gif" alt="stoa demo" width="720">
+</p>
+
 ---
 
 Most agent frameworks give you a single brain with tools. That works — until you need the brain to watch, think, act, and protect at the same time.
