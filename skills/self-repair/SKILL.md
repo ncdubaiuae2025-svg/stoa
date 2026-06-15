@@ -9,11 +9,10 @@ triggers:
 model: deepseek-chat
 ---
 
-# Self-Repair (DeepSeek Compatible)
+# Self-Repair (Safe Mode with Pull Request)
 
-Diagnose and fix a failing skill. Triggered when health-check detects degradation.
-
-**Note:** This skill uses DeepSeek API. Ensure your DeepSeek API key is configured in the environment.
+Diagnose and fix a failing skill by creating a Pull Request with the proposed changes.  
+**No direct file modification** – all changes go through a PR for review.
 
 ## Context
 
@@ -35,21 +34,46 @@ Read the `repair-needed` message from your inbox to identify the failing agent a
    - External service outage → mark for retry, don't modify skill
 4. **Determine fix type**:
    - `no-fix`: External/transient issue, schedule retry
-   - `skill-patch`: Modify the SKILL.md to fix the issue
-   - `config-patch`: Modify stoa.yml (schedule, vars, etc.)
+   - `skill-patch`: Propose changes to the SKILL.md (via PR)
+   - `config-patch`: Propose changes to stoa.yml (via PR)
    - `escalate`: Problem too complex, log for human review
-5. **Apply fix** (if skill-patch):
-   - Edit `skills/<skill>/SKILL.md` with targeted fix
-   - Document what was changed and why
-   - Do NOT rewrite the entire skill — minimal surgical changes only
-6. **Record outcome**: Write to `memory/repair-log.json`:
-   ```json
-   {
-     "timestamp": "ISO",
-     "agent": "...",
-     "skill": "...",
-     "diagnosis": "...",
-     "fix_type": "no-fix|skill-patch|config-patch|escalate",
-     "changes": ["..."],
-     "confidence": 0.8
-   }
+5. **Apply fix via Pull Request** (if skill-patch or config-patch):
+   - Create a new branch: `repair/${agent}/${skill}/$(date +%s)`
+   - Make the minimal required changes to the target file
+   - Commit with message: `guardian: self-repair ${agent}/${skill} — ${fix_type}`
+   - Create a Pull Request using GitHub API (see helper script below)
+   - Assign to the repository owner (or user specified in `memory/config.json`)
+   - Add label `auto-repair`
+   - **Do NOT merge automatically**
+6. **Record outcome**: Write to `memory/repair-log.json` including PR URL.
+
+## Helper script for creating PR (bash)
+
+```bash
+create_pr() {
+  local branch="$1"
+  local title="$2"
+  local body="$3"
+  local target_file="$4"
+  
+  # Ensure we have latest main
+  git fetch origin main
+  git checkout -b "$branch" origin/main
+  
+  # Stage and commit changes (already made)
+  git add "$target_file"
+  git commit -m "$title"
+  git push -u origin "$branch"
+  
+  # Create PR via GitHub CLI (gh) if available
+  if command -v gh &> /dev/null; then
+    gh pr create --title "$title" --body "$body" --label auto-repair
+  else
+    # Fallback: use curl with GITHUB_TOKEN
+    curl -X POST \
+      -H "Authorization: token $GITHUB_TOKEN" \
+      -H "Accept: application/vnd.github.v3+json" \
+      https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls \
+      -d "{\"title\":\"$title\",\"body\":\"$body\",\"head\":\"$branch\",\"base\":\"main\"}"
+  fi
+}
