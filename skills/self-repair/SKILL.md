@@ -6,12 +6,14 @@ triggers:
   - on: mesh
     from: guardian
     type: repair-needed
-model: claude-sonnet-4-20250514
+model: deepseek-chat
 ---
 
-# Self-Repair
+# Self-Repair (DeepSeek Compatible)
 
 Diagnose and fix a failing skill. Triggered when health-check detects degradation.
+
+**Note:** This skill uses DeepSeek API. Ensure your DeepSeek API key is configured in the environment.
 
 ## Context
 
@@ -51,19 +53,3 @@ Read the `repair-needed` message from your inbox to identify the failing agent a
      "changes": ["..."],
      "confidence": 0.8
    }
-   ```
-
-## Constraints
-
-- NEVER modify files in `src/` or `.github/`
-- Maximum 1 repair per agent per hour (check repair-log.json timestamps)
-- If confidence < 0.6 in your fix, choose `escalate` instead
-- Do not create circular repair loops (check if this skill was already repaired in last 2 hours)
-
-## Commit Message
-`guardian: self-repair ${agent}/${skill} — ${fix_type}`
-
-## Exit Codes
-- 0: Repair applied or scheduled
-- 0: No-fix (transient issue)
-- 1: Unable to diagnose
