@@ -1,9 +1,7 @@
 # .github/workflows/chain-runner.yml — Skill Chain Executor
 # Runs multi-step skill pipelines with dependency resolution.
 # Dispatched via workflow_dispatch with a chain ID.
-
 name: chain-runner
-
 on:
   workflow_dispatch:
     inputs:
