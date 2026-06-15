@@ -1,4 +1,4 @@
-name: Stoa Agent with DeepSeek (OpenRouter)
+name: Stoa Agent with DeepSeek Direct
 
 on:
   workflow_dispatch:
@@ -33,28 +33,35 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Call DeepSeek via OpenRouter
+      - name: Call DeepSeek API directly
         env:
-          OPENROUTER_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.NCQ_DEEPSEEK_AI_KEY }}
         run: |
-          # بناء النص المرسل إلى الوكيل
+          # بناء المهمة بشكل آمن
           TASK="Agent: ${{ inputs.agent }}
           Skill: ${{ inputs.skill }}
           ${{ inputs.prompt }}"
           
-          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+          # استخدام jq لإنشاء JSON صحيح
+          JSON_PAYLOAD=$(jq -n \
+            --arg model "deepseek-chat" \
+            --arg content "$TASK" \
+            '{model: $model, messages: [{role: "user", content: $content}]}')
+          
+          echo "=== Sending to DeepSeek API ==="
+          RESPONSE=$(curl -s https://api.deepseek.com/v1/chat/completions \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
-            -d '{
-              "model": "deepseek/deepseek-chat:free",
-              "messages": [{"role": "user", "content": "'"$TASK"'"}]
-            }')
+            -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
+            -d "$JSON_PAYLOAD")
           
-          echo "=== RESPONSE ==="
-          echo "$RESPONSE" | jq -r '.choices[0].message.content // "خطأ: لا يوجد رد"'
+          echo "=== RAW RESPONSE ==="
+          echo "$RESPONSE"
           
-          # حفظ الرد في ملف (اختياري، لرفعه كـ artifact)
-          echo "$RESPONSE" | jq -r '.choices[0].message.content' > response.txt
+          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "خطأ: لا يوجد رد"')
+          echo "=== PARSED CONTENT ==="
+          echo "$CONTENT"
+          
+          echo "$CONTENT" > response.txt
 
       - name: Upload response as artifact
         uses: actions/upload-artifact@v4
