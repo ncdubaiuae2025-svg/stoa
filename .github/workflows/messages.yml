@@ -5,6 +5,7 @@
 name: messages
 run-name: "${{ inputs.message && format('msg ({0}): {1}', inputs.source || 'manual', inputs.message) || 'tick: poll channels' }}"
 
+
 on:
   # schedule:
   #   - cron: '*/5 * * * *'          # uncomment to enable automatic polling
