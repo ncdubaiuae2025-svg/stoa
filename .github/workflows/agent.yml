@@ -1,8 +1,6 @@
 # .github/workflows/agent.yml — Agent Executor
 # Dispatched by tick.yml. Runs a single agent's skill via Claude Code.
-
 name: agent
-
 on:
   workflow_dispatch:
     inputs:
